@@ -22,6 +22,9 @@ import { asyncSearchFlights } from "../../features/flightsearch/flightsearchSlic
 // ✅ Router
 import { useNavigate } from "react-router-dom";
 
+const API_BASE =
+    import.meta?.env?.VITE_API_BASE_URL || "http://localhost:9000/api";
+
 const FlightSearch = () => {
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -38,21 +41,55 @@ const FlightSearch = () => {
     const [openMultiCalIndex, setOpenMultiCalIndex] = useState(null);
     const multiCalendarRef = useRef(null);
 
-    // From/To dropdown
-    const [openFrom, setOpenFrom] = useState(false);
-    const [openTo, setOpenTo] = useState(false);
+    // ✅ Suggestions dropdown state
+    const [openSuggest, setOpenSuggest] = useState({
+        field: null, // "from" | "to" | "mfrom" | "mto"
+        index: null,
+    });
 
+    // From/To input refs for outside click close
     const fromRef = useRef(null);
     const toRef = useRef(null);
     const travelerRef = useRef(null);
 
+    // ✅ Single input text (what user types / sees)
+    const [fromText, setFromText] = useState("");
+    const [toText, setToText] = useState("");
+
+    // ✅ Suggestions data
+    const [fromSug, setFromSug] = useState([]);
+    const [toSug, setToSug] = useState([]);
+    const [multiSug, setMultiSug] = useState([]); // shared for active multi field
+    const [sugLoading, setSugLoading] = useState(false);
+
+    // ✅ Multi input text per segment
+    const [multiText, setMultiText] = useState([
+        { fromText: "", toText: "" },
+        { fromText: "", toText: "" },
+    ]);
+
+    // click outside close
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (calendarRef.current && !calendarRef.current.contains(e.target)) setOpenCalendar(false);
-            if (multiCalendarRef.current && !multiCalendarRef.current.contains(e.target)) setOpenMultiCalIndex(null);
-            if (fromRef.current && !fromRef.current.contains(e.target)) setOpenFrom(false);
-            if (toRef.current && !toRef.current.contains(e.target)) setOpenTo(false);
-            if (travelerRef.current && !travelerRef.current.contains(e.target)) setShowTraveler(false);
+            if (calendarRef.current && !calendarRef.current.contains(e.target))
+                setOpenCalendar(false);
+
+            if (
+                multiCalendarRef.current &&
+                !multiCalendarRef.current.contains(e.target)
+            )
+                setOpenMultiCalIndex(null);
+
+            if (fromRef.current && !fromRef.current.contains(e.target)) {
+                setOpenSuggest((p) => (p.field === "from" ? { field: null, index: null } : p));
+            }
+
+            if (toRef.current && !toRef.current.contains(e.target)) {
+                setOpenSuggest((p) => (p.field === "to" ? { field: null, index: null } : p));
+            }
+
+            if (travelerRef.current && !travelerRef.current.contains(e.target))
+                setShowTraveler(false);
         };
 
         document.addEventListener("mousedown", handleClickOutside);
@@ -66,19 +103,77 @@ const FlightSearch = () => {
         }
     }, [loading, flights, navigate]);
 
-    const optionsFrom = [
-        { code: "ISB", name: "Islamabad International Airport" },
-        { code: "KHI", name: "Karachi International Airport" },
-        { code: "PEW", name: "Peshawar International Airport" },
-        { code: "LHE", name: "Lahore International Airport" },
-    ];
+    /**
+     * ✅ Backend: GET /api/airports?q=isb&limit=10
+     */
+    const fetchAirports = async (q, limit = 8) => {
+        const url = `${API_BASE}/airports?q=${encodeURIComponent(q)}&limit=${limit}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("Airport API failed");
+        return await res.json();
+    };
 
-    const optionsTo = [
-        { code: "DXB", name: "Dubai International Airport" },
-        { code: "DOH", name: "Hamad International Airport, Qatar" },
-        { code: "RUH", name: "King Khalid International Airport, Saudi" },
-        { code: "LHE", name: "Lahore International Airport" },
-    ];
+    /**
+     * ✅ Debounced search helper
+     */
+    const useDebouncedAirportSearch = (query, onResult, enabled = true) => {
+        useEffect(() => {
+            if (!enabled) return;
+            const q = (query || "").trim();
+            if (!q) {
+                onResult([]);
+                return;
+            }
+
+            let alive = true;
+            const t = setTimeout(async () => {
+                try {
+                    setSugLoading(true);
+                    const data = await fetchAirports(q, 10);
+                    if (alive) onResult(Array.isArray(data) ? data : []);
+                } catch (e) {
+                    if (alive) onResult([]);
+                } finally {
+                    if (alive) setSugLoading(false);
+                }
+            }, 250);
+
+            return () => {
+                alive = false;
+                clearTimeout(t);
+            };
+        }, [query, enabled]); // eslint-disable-line
+    };
+
+    // ✅ single suggestions
+    useDebouncedAirportSearch(
+        fromText,
+        (list) => setFromSug(list),
+        openSuggest.field === "from"
+    );
+    useDebouncedAirportSearch(
+        toText,
+        (list) => setToSug(list),
+        openSuggest.field === "to"
+    );
+
+    // ✅ multi suggestions (active only)
+    const activeMultiIndex = openSuggest.field === "mfrom" || openSuggest.field === "mto"
+        ? openSuggest.index
+        : null;
+
+    const activeMultiQuery =
+        activeMultiIndex != null
+            ? openSuggest.field === "mfrom"
+                ? multiText?.[activeMultiIndex]?.fromText || ""
+                : multiText?.[activeMultiIndex]?.toText || ""
+            : "";
+
+    useDebouncedAirportSearch(
+        activeMultiQuery,
+        (list) => setMultiSug(list),
+        activeMultiIndex != null
+    );
 
     /**
      * ✅ NOW FORM FIELDS SAME AS BACKEND
@@ -149,12 +244,13 @@ const FlightSearch = () => {
 
     // ✅ Submit: values already backend-ready
     const handleSubmit = async (values) => {
-        // ✅ tripType force backend valid values
-        const tripType = values.tripType === "roundtrip" ? "round"
-            : values.tripType === "multicity" ? "multi"
-                : values.tripType;
+        const tripType =
+            values.tripType === "roundtrip"
+                ? "round"
+                : values.tripType === "multicity"
+                    ? "multi"
+                    : values.tripType;
 
-        // ✅ build payload
         let payload = {
             tripType,
             adults: Number(values.adults ?? 1),
@@ -174,12 +270,10 @@ const FlightSearch = () => {
             payload.to = (values.to || "").toUpperCase();
             payload.date = values.date;
 
-            if (tripType === "round") {
-                payload.returnDate = values.returnDate;
-            }
+            if (tripType === "round") payload.returnDate = values.returnDate;
         }
 
-        console.log("✅ PAYLOAD GOING =>", payload); // MUST CHECK
+        console.log("✅ PAYLOAD GOING =>", payload);
 
         const res = await dispatch(asyncSearchFlights(payload));
         if (res?.meta?.requestStatus === "rejected") {
@@ -187,38 +281,87 @@ const FlightSearch = () => {
         }
     };
 
+    const fieldShell =
+        "flex items-stretch border border-gray-300 rounded-lg bg-white h-[100px]";
 
-    const fieldShell = "flex items-stretch border border-gray-300 rounded-lg bg-white h-[100px]";
+    // ✅ Suggest item renderer
+    const SuggestItem = ({ item, onPick }) => {
+        return (
+            <div
+                onClick={() => onPick(item)}
+                className="flex items-start gap-3 px-4 py-3 hover:bg-gray-100 cursor-pointer"
+            >
+                <div className="w-6 flex justify-center mt-1">
+                    <img
+                        src={pic}
+                        alt="plane"
+                        className="w-5 h-5"
+                        style={{ filter: "brightness(0)" }}
+                    />
+                </div>
+                <div className="min-w-0">
+                    <div className="font-semibold text-gray-900">
+                        {item.iata || item.icao || ""}
+                    </div>
+                    <div className="text-sm text-gray-500 break-words leading-snug">
+                        {item.name}
+                        {item.city ? `, ${item.city}` : ""}{" "}
+                        {item.country ? `(${item.country})` : ""}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     return (
-        <Formik initialValues={initialValues} validationSchema={validationSchema} onSubmit={handleSubmit}>
+        <Formik
+            initialValues={initialValues}
+            validationSchema={validationSchema}
+            onSubmit={handleSubmit}
+        >
             {({ values, setFieldValue }) => {
                 const isRoundTrip = values.tripType === "round";
                 const isOneWay = values.tripType === "oneway";
                 const isMulti = values.tripType === "multi";
 
-                const current = optionsFrom.find((opt) => opt.code === values.from);
-                const currentTo = optionsTo.find((opt) => opt.code === values.to);
-
                 const swapAirports = () => {
                     if (!values.from && !values.to) return;
-                    setFieldValue("from", values.to);
-                    setFieldValue("to", values.from);
+
+                    // swap form codes
+                    const oldFrom = values.from;
+                    const oldTo = values.to;
+                    setFieldValue("from", oldTo);
+                    setFieldValue("to", oldFrom);
+
+                    // swap display text too
+                    const oldFromText = fromText;
+                    const oldToText = toText;
+                    setFromText(oldToText);
+                    setToText(oldFromText);
                 };
 
                 // display dates
-                const displayFrom = values.date ? format(new Date(values.date), "dd MMM yyyy") : "";
-                const displayTo = values.returnDate ? format(new Date(values.returnDate), "dd MMM yyyy") : "";
+                const displayFrom = values.date
+                    ? format(new Date(values.date), "dd MMM yyyy")
+                    : "";
+                const displayTo = values.returnDate
+                    ? format(new Date(values.returnDate), "dd MMM yyyy")
+                    : "";
 
                 const startDateObj = values.date ? new Date(values.date) : new Date();
                 const endDateObj = values.returnDate ? new Date(values.returnDate) : startDateObj;
 
-                const rangeSelection = [{ startDate: startDateObj, endDate: endDateObj, key: "selection" }];
+                const rangeSelection = [
+                    { startDate: startDateObj, endDate: endDateObj, key: "selection" },
+                ];
 
                 const setTripType = (type) => {
                     setFieldValue("tripType", type);
                     setOpenCalendar(false);
                     setOpenMultiCalIndex(null);
+
+                    // close suggestions
+                    setOpenSuggest({ field: null, index: null });
 
                     if (type === "oneway") setFieldValue("returnDate", "");
                 };
@@ -226,7 +369,15 @@ const FlightSearch = () => {
                 // multi helpers
                 const addSegment = () => {
                     if (values.segments.length >= 5) return;
-                    setFieldValue("segments", [...values.segments, { from: "", to: "", date: "" }]);
+                    setFieldValue("segments", [
+                        ...values.segments,
+                        { from: "", to: "", date: "" },
+                    ]);
+
+                    setMultiText((prev) => [
+                        ...prev,
+                        { fromText: "", toText: "" },
+                    ]);
                 };
 
                 const removeSegment = (index) => {
@@ -234,6 +385,8 @@ const FlightSearch = () => {
                         "segments",
                         values.segments.filter((_, i) => i !== index)
                     );
+
+                    setMultiText((prev) => prev.filter((_, i) => i !== index));
                 };
 
                 const updateSegment = (index, field, value) => {
@@ -247,6 +400,49 @@ const FlightSearch = () => {
                     const updated = [...values.segments];
                     updated[index] = { ...seg, from: seg.to, to: seg.from };
                     setFieldValue("segments", updated);
+
+                    // swap display texts
+                    setMultiText((prev) => {
+                        const copy = [...prev];
+                        const row = copy[index] || { fromText: "", toText: "" };
+                        copy[index] = { fromText: row.toText, toText: row.fromText };
+                        return copy;
+                    });
+                };
+
+                const pickSingleFrom = (item) => {
+                    const code = (item.iata || item.icao || "").toUpperCase();
+                    setFieldValue("from", code);
+                    setFromText(`${item.city || ""} - ${item.name} (${code})`.trim());
+                    setOpenSuggest({ field: null, index: null });
+                };
+
+                const pickSingleTo = (item) => {
+                    const code = (item.iata || item.icao || "").toUpperCase();
+                    setFieldValue("to", code);
+                    setToText(`${item.city || ""} - ${item.name} (${code})`.trim());
+                    setOpenSuggest({ field: null, index: null });
+                };
+
+                const pickMulti = (index, which, item) => {
+                    const code = (item.iata || item.icao || "").toUpperCase();
+                    updateSegment(index, which === "from" ? "from" : "to", code);
+
+                    setMultiText((prev) => {
+                        const copy = [...prev];
+                        const row = copy[index] || { fromText: "", toText: "" };
+
+                        const label = `${item.city || ""} - ${item.name} (${code})`.trim();
+
+                        copy[index] =
+                            which === "from"
+                                ? { ...row, fromText: label }
+                                : { ...row, toText: label };
+
+                        return copy;
+                    });
+
+                    setOpenSuggest({ field: null, index: null });
                 };
 
                 return (
@@ -262,21 +458,30 @@ const FlightSearch = () => {
                         <div className="flex gap-6 mb-3 text-sm">
                             <span
                                 onClick={() => setTripType("round")}
-                                className={`cursor-pointer ${values.tripType === "round" ? "font-bold text-black" : "text-gray-500"}`}
+                                className={`cursor-pointer ${values.tripType === "round"
+                                        ? "font-bold text-black"
+                                        : "text-gray-500"
+                                    }`}
                             >
                                 ROUND TRIP
                             </span>
 
                             <span
                                 onClick={() => setTripType("oneway")}
-                                className={`cursor-pointer ${values.tripType === "oneway" ? "font-bold text-black" : "text-gray-500"}`}
+                                className={`cursor-pointer ${values.tripType === "oneway"
+                                        ? "font-bold text-black"
+                                        : "text-gray-500"
+                                    }`}
                             >
                                 ONE WAY
                             </span>
 
                             <span
                                 onClick={() => setTripType("multi")}
-                                className={`cursor-pointer ${values.tripType === "multi" ? "font-bold text-black" : "text-gray-500"}`}
+                                className={`cursor-pointer ${values.tripType === "multi"
+                                        ? "font-bold text-black"
+                                        : "text-gray-500"
+                                    }`}
                             >
                                 MULTI CITY
                             </span>
@@ -289,55 +494,57 @@ const FlightSearch = () => {
                                     {/* FROM + TO */}
                                     <div className="relative z-[60] flex items-stretch w-[50%] gap-3 min-w-0">
                                         {/* FROM */}
-                                        <div className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`} ref={fromRef}>
+                                        <div
+                                            className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`}
+                                            ref={fromRef}
+                                        >
                                             <div className="bg-blue-500 flex items-center justify-center w-12 shrink-0 rounded-l-lg">
                                                 <img src={pic} alt="Plane" className="w-6 h-6" />
                                             </div>
 
                                             <div className="flex-1 px-4 flex flex-col justify-center min-w-0">
-                                                <span className="font-bold text-lg leading-tight">{current?.code || ""}</span>
+                                                <span className="font-bold text-lg leading-tight">
+                                                    {values.from || ""}
+                                                </span>
 
-                                                <div
-                                                    onClick={() => {
-                                                        setOpenFrom((p) => !p);
-                                                        setOpenTo(false);
+                                                {/* ✅ INPUT */}
+                                                <input
+                                                    value={fromText}
+                                                    onChange={(e) => {
+                                                        setFromText(e.target.value);
+                                                        setOpenSuggest({ field: "from", index: null });
+                                                        // when user types new, clear selected code
+                                                        setFieldValue("from", "");
                                                     }}
-                                                    className={`cursor-pointer text-sm mt-1 ${current?.name ? "text-gray-600" : "text-gray-400"}`}
-                                                    title={current?.name || "From (City or Airport)"}
-                                                >
-                                                    <span
-                                                        className="block max-w-full leading-snug break-words"
-                                                        style={{
-                                                            display: "-webkit-box",
-                                                            WebkitLineClamp: 2,
-                                                            WebkitBoxOrient: "vertical",
-                                                            overflow: "hidden",
-                                                        }}
-                                                    >
-                                                        {current?.name || "From (City or Airport)"}
-                                                    </span>
-                                                </div>
+                                                    onFocus={() =>
+                                                        setOpenSuggest({ field: "from", index: null })
+                                                    }
+                                                    placeholder="From (City or Airport)"
+                                                    className="mt-1 text-sm text-gray-600 outline-none bg-transparent"
+                                                />
                                             </div>
 
-                                            {openFrom && (
-                                                <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden">
-                                                    {optionsFrom.map((opt) => (
-                                                        <div
-                                                            key={opt.code}
-                                                            onClick={() => {
-                                                                setFieldValue("from", opt.code);
-                                                                setOpenFrom(false);
-                                                            }}
-                                                            className="flex items-start gap-3 px-4 py-3 hover:bg-gray-100 cursor-pointer"
-                                                        >
-                                                            <div className="w-6 flex justify-center mt-1">
-                                                                <img src={pic} alt="plane" className="w-5 h-5" style={{ filter: "brightness(0)" }} />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <div className="font-semibold text-gray-900">{opt.code}</div>
-                                                                <div className="text-sm text-gray-500 break-words leading-snug">{opt.name}</div>
-                                                            </div>
+                                            {/* ✅ Suggestions */}
+                                            {openSuggest.field === "from" && (
+                                                <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[340px] overflow-y-auto">
+                                                    {sugLoading && (
+                                                        <div className="px-4 py-3 text-sm text-gray-500">
+                                                            Loading...
                                                         </div>
+                                                    )}
+
+                                                    {!sugLoading && fromSug.length === 0 && (
+                                                        <div className="px-4 py-3 text-sm text-gray-500">
+                                                            No airports found
+                                                        </div>
+                                                    )}
+
+                                                    {fromSug.map((item, i) => (
+                                                        <SuggestItem
+                                                            key={`${item.iata || item.icao || "x"}-${i}`}
+                                                            item={item}
+                                                            onPick={pickSingleFrom}
+                                                        />
                                                     ))}
                                                 </div>
                                             )}
@@ -356,55 +563,56 @@ const FlightSearch = () => {
                                         </div>
 
                                         {/* TO */}
-                                        <div className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`} ref={toRef}>
+                                        <div
+                                            className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`}
+                                            ref={toRef}
+                                        >
                                             <div className="flex-1 px-4 flex flex-col justify-center min-w-0">
-                                                <span className="font-bold text-lg leading-tight">{currentTo?.code || ""}</span>
+                                                <span className="font-bold text-lg leading-tight">
+                                                    {values.to || ""}
+                                                </span>
 
-                                                <div
-                                                    onClick={() => {
-                                                        setOpenTo((p) => !p);
-                                                        setOpenFrom(false);
+                                                {/* ✅ INPUT */}
+                                                <input
+                                                    value={toText}
+                                                    onChange={(e) => {
+                                                        setToText(e.target.value);
+                                                        setOpenSuggest({ field: "to", index: null });
+                                                        setFieldValue("to", "");
                                                     }}
-                                                    className={`cursor-pointer text-sm mt-1 ${currentTo?.name ? "text-gray-600" : "text-gray-400"}`}
-                                                    title={currentTo?.name || "To (City or Airport)"}
-                                                >
-                                                    <span
-                                                        className="block max-w-full leading-snug break-words"
-                                                        style={{
-                                                            display: "-webkit-box",
-                                                            WebkitLineClamp: 2,
-                                                            WebkitBoxOrient: "vertical",
-                                                            overflow: "hidden",
-                                                        }}
-                                                    >
-                                                        {currentTo?.name || "To (City or Airport)"}
-                                                    </span>
-                                                </div>
+                                                    onFocus={() =>
+                                                        setOpenSuggest({ field: "to", index: null })
+                                                    }
+                                                    placeholder="To (City or Airport)"
+                                                    className="mt-1 text-sm text-gray-600 outline-none bg-transparent"
+                                                />
                                             </div>
 
                                             <div className="bg-blue-500 flex items-center justify-center w-12 shrink-0 rounded-r-lg">
                                                 <img src={pic2} alt="Arrival" className="w-9 h-9" />
                                             </div>
 
-                                            {openTo && (
-                                                <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden">
-                                                    {optionsTo.map((opt) => (
-                                                        <div
-                                                            key={opt.code}
-                                                            onClick={() => {
-                                                                setFieldValue("to", opt.code);
-                                                                setOpenTo(false);
-                                                            }}
-                                                            className="flex items-start gap-3 px-4 py-3 hover:bg-gray-100 cursor-pointer"
-                                                        >
-                                                            <div className="w-6 flex justify-center mt-1">
-                                                                <img src={pic} alt="plane" className="w-5 h-5" style={{ filter: "brightness(0)" }} />
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <div className="font-semibold text-gray-900">{opt.code}</div>
-                                                                <div className="text-sm text-gray-500 break-words leading-snug">{opt.name}</div>
-                                                            </div>
+                                            {/* ✅ Suggestions */}
+                                            {openSuggest.field === "to" && (
+                                                <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[340px] overflow-y-auto">
+                                                    {sugLoading && (
+                                                        <div className="px-4 py-3 text-sm text-gray-500">
+                                                            Loading...
                                                         </div>
+                                                    )}
+
+                                                    {!sugLoading && toSug.length === 0 && (
+                                                        <div className="px-4 py-3 text-sm text-gray-500">
+                                                            No airports found
+                                                        </div>
+                                                    )}
+
+                                                    {toSug.map((item, i) => (
+                                                        <SuggestItem
+                                                            key={`${item.iata || item.icao || "x"}-${i}`}
+                                                            item={item}
+                                                            onPick={pickSingleTo}
+                                                        />
                                                     ))}
                                                 </div>
                                             )}
@@ -419,16 +627,22 @@ const FlightSearch = () => {
                                                 className={`${fieldShell} px-4 cursor-pointer flex flex-col justify-center`}
                                                 onClick={() => setOpenCalendar((p) => !p)}
                                             >
-                                                <span className="font-bold text-lg">{isRoundTrip ? "Date Range" : "Select Date"}</span>
+                                                <span className="font-bold text-lg">
+                                                    {isRoundTrip ? "Date Range" : "Select Date"}
+                                                </span>
                                                 <p className="text-gray-400 text-sm mt-1">
-                                                    {isRoundTrip ? "Departure - Return Date" : "Departure Date"}
+                                                    {isRoundTrip
+                                                        ? "Departure - Return Date"
+                                                        : "Departure Date"}
                                                 </p>
 
                                                 <p className="text-gray-500 text-sm mt-1 truncate">
                                                     {isRoundTrip ? (
                                                         displayFrom || displayTo ? (
                                                             <>
-                                                                {displayFrom} {displayFrom && displayTo ? "→" : ""} {displayTo}
+                                                                {displayFrom}{" "}
+                                                                {displayFrom && displayTo ? "→" : ""}{" "}
+                                                                {displayTo}
                                                             </>
                                                         ) : (
                                                             ""
@@ -448,7 +662,10 @@ const FlightSearch = () => {
                                                                 const start = item.selection.startDate;
                                                                 const end = item.selection.endDate;
                                                                 setFieldValue("date", format(start, "yyyy-MM-dd"));
-                                                                setFieldValue("returnDate", format(end, "yyyy-MM-dd"));
+                                                                setFieldValue(
+                                                                    "returnDate",
+                                                                    format(end, "yyyy-MM-dd")
+                                                                );
                                                             }}
                                                             months={2}
                                                             direction="horizontal"
@@ -460,8 +677,12 @@ const FlightSearch = () => {
 
                                                     {isOneWay && (
                                                         <Calendar
-                                                            date={values.date ? new Date(values.date) : new Date()}
-                                                            onChange={(d) => setFieldValue("date", format(d, "yyyy-MM-dd"))}
+                                                            date={
+                                                                values.date ? new Date(values.date) : new Date()
+                                                            }
+                                                            onChange={(d) =>
+                                                                setFieldValue("date", format(d, "yyyy-MM-dd"))
+                                                            }
                                                         />
                                                     )}
 
@@ -499,7 +720,10 @@ const FlightSearch = () => {
                                                                 type="button"
                                                                 key={num}
                                                                 onClick={() => setFieldValue("adults", num)}
-                                                                className={`px-3 py-1 border rounded ${values.adults === num ? "bg-blue-500 text-white" : ""}`}
+                                                                className={`px-3 py-1 border rounded ${values.adults === num
+                                                                        ? "bg-blue-500 text-white"
+                                                                        : ""
+                                                                    }`}
                                                             >
                                                                 {num}
                                                             </button>
@@ -513,7 +737,10 @@ const FlightSearch = () => {
                                                                 type="button"
                                                                 key={cls}
                                                                 onClick={() => setFieldValue("travelClass", cls)}
-                                                                className={`px-3 py-1 border rounded ${values.travelClass === cls ? "bg-blue-500 text-white" : ""}`}
+                                                                className={`px-3 py-1 border rounded ${values.travelClass === cls
+                                                                        ? "bg-blue-500 text-white"
+                                                                        : ""
+                                                                    }`}
                                                             >
                                                                 {cls}
                                                             </button>
@@ -528,7 +755,9 @@ const FlightSearch = () => {
                                             <PrimaryBtn
                                                 type="submit"
                                                 disabled={loading}
-                                                className={`w-full h-[100px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
+                                                className={`w-full h-[100px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading
+                                                        ? "bg-blue-400"
+                                                        : "bg-blue-600 hover:bg-blue-700"
                                                     }`}
                                             >
                                                 {loading ? "..." : <CiSearch />}
@@ -542,11 +771,14 @@ const FlightSearch = () => {
                             {isMulti && (
                                 <div className="flex flex-col gap-3">
                                     {values.segments.map((seg, index) => (
-                                        <div key={suggestedKey(seg, index)} className="flex items-center gap-2 relative w-full">
+                                        <div
+                                            key={suggestedKey(seg, index)}
+                                            className="flex items-center gap-2 relative w-full"
+                                        >
                                             {/* Left */}
                                             <div className="flex flex-1 w-[70%] gap-2 min-w-0">
                                                 {/* From */}
-                                                <div className="flex border border-gray-300 rounded-lg flex-1 h-20 overflow-hidden min-w-0">
+                                                <div className="flex border border-gray-300 rounded-lg flex-1 h-20 overflow-visible min-w-0 relative">
                                                     <div className="bg-blue-500 flex items-center justify-center h-full w-12 shrink-0">
                                                         <img src={pic} alt="Plane" className="w-6 h-6" />
                                                     </div>
@@ -554,22 +786,49 @@ const FlightSearch = () => {
                                                     <div className="flex-1 p-3 flex flex-col justify-center min-w-0">
                                                         <span className="font-bold text-lg">{seg.from || ""}</span>
 
-                                                        <select
-                                                            className={`mt-1 border-none outline-none w-full cursor-pointer text-sm bg-transparent ${seg.from ? "text-gray-600" : "text-gray-400"
-                                                                }`}
-                                                            value={seg.from}
-                                                            onChange={(e) => updateSegment(index, "from", e.target.value)}
-                                                        >
-                                                            <option value="" disabled>
-                                                                From (City or Airport)
-                                                            </option>
-                                                            {optionsFrom.map((opt) => (
-                                                                <option key={opt.code} value={opt.code}>
-                                                                    {opt.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                        <input
+                                                            value={multiText?.[index]?.fromText || ""}
+                                                            onChange={(e) => {
+                                                                const v = e.target.value;
+                                                                setMultiText((prev) => {
+                                                                    const copy = [...prev];
+                                                                    const row = copy[index] || { fromText: "", toText: "" };
+                                                                    copy[index] = { ...row, fromText: v };
+                                                                    return copy;
+                                                                });
+                                                                setOpenSuggest({ field: "mfrom", index });
+                                                                updateSegment(index, "from", "");
+                                                            }}
+                                                            onFocus={() => setOpenSuggest({ field: "mfrom", index })}
+                                                            placeholder="From (City or Airport)"
+                                                            className="mt-1 text-sm text-gray-600 outline-none bg-transparent"
+                                                        />
                                                     </div>
+
+                                                    {/* Multi From Suggestions */}
+                                                    {openSuggest.field === "mfrom" && openSuggest.index === index && (
+                                                        <div className="absolute left-0 top-[85px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[320px] overflow-y-auto">
+                                                            {sugLoading && (
+                                                                <div className="px-4 py-3 text-sm text-gray-500">
+                                                                    Loading...
+                                                                </div>
+                                                            )}
+
+                                                            {!sugLoading && multiSug.length === 0 && (
+                                                                <div className="px-4 py-3 text-sm text-gray-500">
+                                                                    No airports found
+                                                                </div>
+                                                            )}
+
+                                                            {multiSug.map((item, i) => (
+                                                                <SuggestItem
+                                                                    key={`${item.iata || item.icao || "x"}-${i}`}
+                                                                    item={item}
+                                                                    onPick={(it) => pickMulti(index, "from", it)}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Swap */}
@@ -583,30 +842,57 @@ const FlightSearch = () => {
                                                 </div>
 
                                                 {/* To */}
-                                                <div className="flex items-center border border-gray-300 rounded-lg flex-1 h-20 overflow-hidden min-w-0">
+                                                <div className="flex items-center border border-gray-300 rounded-lg flex-1 h-20 overflow-visible min-w-0 relative">
                                                     <div className="flex-1 p-3 flex flex-col justify-center min-w-0">
                                                         <span className="font-bold text-lg">{seg.to || ""}</span>
 
-                                                        <select
-                                                            className={`mt-1 border-none outline-none w-full cursor-pointer text-sm bg-transparent ${seg.to ? "text-gray-600" : "text-gray-400"
-                                                                }`}
-                                                            value={seg.to}
-                                                            onChange={(e) => updateSegment(index, "to", e.target.value)}
-                                                        >
-                                                            <option value="" disabled>
-                                                                To (City or Airport)
-                                                            </option>
-                                                            {optionsTo.map((opt) => (
-                                                                <option key={opt.code} value={opt.code}>
-                                                                    {opt.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                        <input
+                                                            value={multiText?.[index]?.toText || ""}
+                                                            onChange={(e) => {
+                                                                const v = e.target.value;
+                                                                setMultiText((prev) => {
+                                                                    const copy = [...prev];
+                                                                    const row = copy[index] || { fromText: "", toText: "" };
+                                                                    copy[index] = { ...row, toText: v };
+                                                                    return copy;
+                                                                });
+                                                                setOpenSuggest({ field: "mto", index });
+                                                                updateSegment(index, "to", "");
+                                                            }}
+                                                            onFocus={() => setOpenSuggest({ field: "mto", index })}
+                                                            placeholder="To (City or Airport)"
+                                                            className="mt-1 text-sm text-gray-600 outline-none bg-transparent"
+                                                        />
                                                     </div>
 
                                                     <div className="bg-blue-500 flex items-center justify-center h-full w-12 shrink-0">
                                                         <img src={pic2} alt="Arrival" className="w-6 h-6" />
                                                     </div>
+
+                                                    {/* Multi To Suggestions */}
+                                                    {openSuggest.field === "mto" && openSuggest.index === index && (
+                                                        <div className="absolute left-0 top-[85px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[320px] overflow-y-auto">
+                                                            {sugLoading && (
+                                                                <div className="px-4 py-3 text-sm text-gray-500">
+                                                                    Loading...
+                                                                </div>
+                                                            )}
+
+                                                            {!sugLoading && multiSug.length === 0 && (
+                                                                <div className="px-4 py-3 text-sm text-gray-500">
+                                                                    No airports found
+                                                                </div>
+                                                            )}
+
+                                                            {multiSug.map((item, i) => (
+                                                                <SuggestItem
+                                                                    key={`${item.iata || item.icao || "x"}-${i}`}
+                                                                    item={item}
+                                                                    onPick={(it) => pickMulti(index, "to", it)}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -616,10 +902,13 @@ const FlightSearch = () => {
                                                     <span className="font-bold text-lg">Select Date</span>
 
                                                     <p
-                                                        className={`text-sm mt-1 cursor-pointer ${seg.date ? "text-gray-600" : "text-gray-400"}`}
+                                                        className={`text-sm mt-1 cursor-pointer ${seg.date ? "text-gray-600" : "text-gray-400"
+                                                            }`}
                                                         onClick={() => setOpenMultiCalIndex(index)}
                                                     >
-                                                        {seg.date ? format(new Date(seg.date), "dd MMM yyyy") : "Departure Date"}
+                                                        {seg.date
+                                                            ? format(new Date(seg.date), "dd MMM yyyy")
+                                                            : "Departure Date"}
                                                     </p>
 
                                                     {openMultiCalIndex === index && (
@@ -629,7 +918,9 @@ const FlightSearch = () => {
                                                         >
                                                             <Calendar
                                                                 date={seg.date ? new Date(seg.date) : new Date()}
-                                                                onChange={(d) => updateSegment(index, "date", format(d, "yyyy-MM-dd"))}
+                                                                onChange={(d) =>
+                                                                    updateSegment(index, "date", format(d, "yyyy-MM-dd"))
+                                                                }
                                                             />
                                                             <div className="flex justify-end mt-2">
                                                                 <button
@@ -676,9 +967,15 @@ const FlightSearch = () => {
 
                                         {/* Adults & Search */}
                                         <div className="flex gap-3 items-center w-[40%] justify-end">
-                                            <div className="border border-gray-300 rounded-lg p-3 relative flex-1" ref={travelerRef}>
+                                            <div
+                                                className="border border-gray-300 rounded-lg p-3 relative flex-1"
+                                                ref={travelerRef}
+                                            >
                                                 <span className="font-bold text-lg">Adults and class</span>
-                                                <p className="text-gray-500 text-sm mt-1 cursor-pointer" onClick={() => setShowTraveler((p) => !p)}>
+                                                <p
+                                                    className="text-gray-500 text-sm mt-1 cursor-pointer"
+                                                    onClick={() => setShowTraveler((p) => !p)}
+                                                >
                                                     {values.adults} Adults - {values.travelClass}
                                                 </p>
 
@@ -691,7 +988,10 @@ const FlightSearch = () => {
                                                                     type="button"
                                                                     key={num}
                                                                     onClick={() => setFieldValue("adults", num)}
-                                                                    className={`px-3 py-1 border rounded ${values.adults === num ? "bg-blue-500 text-white" : ""}`}
+                                                                    className={`px-3 py-1 border rounded ${values.adults === num
+                                                                            ? "bg-blue-500 text-white"
+                                                                            : ""
+                                                                        }`}
                                                                 >
                                                                     {num}
                                                                 </button>
@@ -705,7 +1005,10 @@ const FlightSearch = () => {
                                                                     type="button"
                                                                     key={cls}
                                                                     onClick={() => setFieldValue("travelClass", cls)}
-                                                                    className={`px-3 py-1 border rounded ${values.travelClass === cls ? "bg-blue-500 text-white" : ""}`}
+                                                                    className={`px-3 py-1 border rounded ${values.travelClass === cls
+                                                                            ? "bg-blue-500 text-white"
+                                                                            : ""
+                                                                        }`}
                                                                 >
                                                                     {cls}
                                                                 </button>
@@ -719,7 +1022,9 @@ const FlightSearch = () => {
                                                 <PrimaryBtn
                                                     type="submit"
                                                     disabled={loading}
-                                                    className={`w-full h-[80px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
+                                                    className={`w-full h-[80px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading
+                                                            ? "bg-blue-400"
+                                                            : "bg-blue-600 hover:bg-blue-700"
                                                         }`}
                                                 >
                                                     {loading ? "..." : <CiSearch />}
