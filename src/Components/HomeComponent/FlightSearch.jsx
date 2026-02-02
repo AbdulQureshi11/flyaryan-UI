@@ -15,18 +15,30 @@ import { format } from "date-fns";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 
+// ✅ Redux
+import { useDispatch, useSelector } from "react-redux";
+import { asyncSearchFlights } from "../../features/flightsearch/flightsearchSlice";
+
+// ✅ Router
+import { useNavigate } from "react-router-dom";
+
 const FlightSearch = () => {
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+
+    const { loading, error, flights } = useSelector((state) => state.flightSearch);
+
     const [showTraveler, setShowTraveler] = useState(false);
 
-    // RoundTrip/OneWay calendar
+    // Round/OneWay calendar
     const [openCalendar, setOpenCalendar] = useState(false);
     const calendarRef = useRef(null);
 
-    // MultiCity per-row calendar (index)
+    // Multi per-row calendar
     const [openMultiCalIndex, setOpenMultiCalIndex] = useState(null);
     const multiCalendarRef = useRef(null);
 
-    // From / To dropdown (single trip)
+    // From/To dropdown
     const [openFrom, setOpenFrom] = useState(false);
     const [openTo, setOpenTo] = useState(false);
 
@@ -36,26 +48,23 @@ const FlightSearch = () => {
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (calendarRef.current && !calendarRef.current.contains(e.target)) {
-                setOpenCalendar(false);
-            }
-            if (multiCalendarRef.current && !multiCalendarRef.current.contains(e.target)) {
-                setOpenMultiCalIndex(null);
-            }
-            if (fromRef.current && !fromRef.current.contains(e.target)) {
-                setOpenFrom(false);
-            }
-            if (toRef.current && !toRef.current.contains(e.target)) {
-                setOpenTo(false);
-            }
-            if (travelerRef.current && !travelerRef.current.contains(e.target)) {
-                setShowTraveler(false);
-            }
+            if (calendarRef.current && !calendarRef.current.contains(e.target)) setOpenCalendar(false);
+            if (multiCalendarRef.current && !multiCalendarRef.current.contains(e.target)) setOpenMultiCalIndex(null);
+            if (fromRef.current && !fromRef.current.contains(e.target)) setOpenFrom(false);
+            if (toRef.current && !toRef.current.contains(e.target)) setOpenTo(false);
+            if (travelerRef.current && !travelerRef.current.contains(e.target)) setShowTraveler(false);
         };
 
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    // ✅ navigate after search success
+    useEffect(() => {
+        if (!loading && Array.isArray(flights) && flights.length > 0) {
+            navigate("/flight-listing");
+        }
+    }, [loading, flights, navigate]);
 
     const optionsFrom = [
         { code: "ISB", name: "Islamabad International Airport" },
@@ -71,54 +80,58 @@ const FlightSearch = () => {
         { code: "LHE", name: "Lahore International Airport" },
     ];
 
+    /**
+     * ✅ NOW FORM FIELDS SAME AS BACKEND
+     * tripType: oneway | round | multi
+     * from/to/date/returnDate/adults/travelClass/segments
+     */
     const initialValues = {
-        tripType: "roundtrip",
+        tripType: "round",
         from: "",
         to: "",
-        traveler: 1,
+        adults: 1,
         travelClass: "Economy",
-        fromDate: "",
-        toDate: "",
-        //  MultiCity: start with 2 EMPTY rows (no preset date/from/to)
+        date: "",
+        returnDate: "",
         segments: [
             { from: "", to: "", date: "" },
             { from: "", to: "", date: "" },
         ],
     };
 
-    //  Validation: MultiCity requires segments filled, Round/One requires single fields
+    // ✅ Validation updated to backend names
     const validationSchema = Yup.object().shape({
-        tripType: Yup.string().oneOf(["roundtrip", "oneway", "multicity"]).required(),
+        tripType: Yup.string().oneOf(["round", "oneway", "multi"]).required(),
 
         from: Yup.string().when("tripType", {
-            is: (t) => t !== "multicity",
+            is: (t) => t !== "multi",
             then: (s) => s.required("From is required"),
             otherwise: (s) => s.notRequired(),
         }),
 
         to: Yup.string().when("tripType", {
-            is: (t) => t !== "multicity",
+            is: (t) => t !== "multi",
             then: (s) => s.required("To is required"),
             otherwise: (s) => s.notRequired(),
         }),
 
-        traveler: Yup.number().min(1).max(4).required("Traveler is required"),
+        adults: Yup.number().min(1).max(9).required("Adults is required"),
         travelClass: Yup.string().required("Class is required"),
 
-        fromDate: Yup.string().when("tripType", {
-            is: (t) => t === "roundtrip" || t === "oneway",
+        date: Yup.string().when("tripType", {
+            is: (t) => t === "round" || t === "oneway",
             then: (s) => s.required("Departure date is required"),
             otherwise: (s) => s.notRequired(),
         }),
 
-        toDate: Yup.string().when("tripType", {
-            is: "roundtrip",
+        returnDate: Yup.string().when("tripType", {
+            is: "round",
             then: (schema) => schema.required("Return date is required"),
             otherwise: (schema) => schema.notRequired(),
         }),
 
         segments: Yup.array().when("tripType", {
-            is: "multicity",
+            is: "multi",
             then: (arrSchema) =>
                 arrSchema
                     .min(2, "At least 2 flights required")
@@ -134,89 +147,93 @@ const FlightSearch = () => {
         }),
     });
 
-    //  IMPORTANT: Submit payload me only relevant data bhejo
-    const handleSubmit = (values) => {
-        const cleanedSegments = (values.segments || []).filter(
-            (s) => s.from && s.to && s.date
-        );
+    // ✅ Submit: values already backend-ready
+    const handleSubmit = async (values) => {
+        // ✅ tripType force backend valid values
+        const tripType = values.tripType === "roundtrip" ? "round"
+            : values.tripType === "multicity" ? "multi"
+                : values.tripType;
 
-        const payload =
-            values.tripType === "multicity"
-                ? {
-                    tripType: values.tripType,
-                    traveler: values.traveler,
-                    travelClass: values.travelClass,
-                    segments: cleanedSegments, //  only filled segments
-                }
-                : {
-                    tripType: values.tripType,
-                    from: values.from,
-                    to: values.to,
-                    traveler: values.traveler,
-                    travelClass: values.travelClass,
-                    fromDate: values.fromDate,
-                    ...(values.tripType === "roundtrip" ? { toDate: values.toDate } : {}),
-                    //  segments OMIT for oneway/roundtrip
-                };
+        // ✅ build payload
+        let payload = {
+            tripType,
+            adults: Number(values.adults ?? 1),
+            travelClass: values.travelClass ?? "Economy",
+        };
 
-        console.log("Submit Payload:", payload);
+        if (tripType === "multi") {
+            payload.segments = (values.segments || [])
+                .filter((s) => s.from && s.to && s.date)
+                .map((s) => ({
+                    from: s.from.toUpperCase(),
+                    to: s.to.toUpperCase(),
+                    date: s.date,
+                }));
+        } else {
+            payload.from = (values.from || "").toUpperCase();
+            payload.to = (values.to || "").toUpperCase();
+            payload.date = values.date;
+
+            if (tripType === "round") {
+                payload.returnDate = values.returnDate;
+            }
+        }
+
+        console.log("✅ PAYLOAD GOING =>", payload); // MUST CHECK
+
+        const res = await dispatch(asyncSearchFlights(payload));
+        if (res?.meta?.requestStatus === "rejected") {
+            console.log("Search Failed:", res?.payload);
+        }
     };
 
-    const fieldShell =
-        "flex items-stretch border border-gray-300 rounded-lg bg-white h-[100px]";
+
+    const fieldShell = "flex items-stretch border border-gray-300 rounded-lg bg-white h-[100px]";
 
     return (
         <Formik initialValues={initialValues} validationSchema={validationSchema} onSubmit={handleSubmit}>
             {({ values, setFieldValue }) => {
-                const isRoundTrip = values.tripType === "roundtrip";
+                const isRoundTrip = values.tripType === "round";
                 const isOneWay = values.tripType === "oneway";
-                const isMulti = values.tripType === "multicity";
+                const isMulti = values.tripType === "multi";
 
                 const current = optionsFrom.find((opt) => opt.code === values.from);
                 const currentTo = optionsTo.find((opt) => opt.code === values.to);
 
                 const swapAirports = () => {
                     if (!values.from && !values.to) return;
-                    const oldFrom = values.from;
-                    const oldTo = values.to;
-                    setFieldValue("from", oldTo);
-                    setFieldValue("to", oldFrom);
+                    setFieldValue("from", values.to);
+                    setFieldValue("to", values.from);
                 };
 
-                // Dates display (single trip)
-                const displayFrom = values.fromDate ? format(new Date(values.fromDate), "dd MMM yyyy") : "";
-                const displayTo = values.toDate ? format(new Date(values.toDate), "dd MMM yyyy") : "";
+                // display dates
+                const displayFrom = values.date ? format(new Date(values.date), "dd MMM yyyy") : "";
+                const displayTo = values.returnDate ? format(new Date(values.returnDate), "dd MMM yyyy") : "";
 
-                const startDateObj = values.fromDate ? new Date(values.fromDate) : new Date();
-                const endDateObj = values.toDate ? new Date(values.toDate) : startDateObj;
+                const startDateObj = values.date ? new Date(values.date) : new Date();
+                const endDateObj = values.returnDate ? new Date(values.returnDate) : startDateObj;
 
-                const rangeSelection = [
-                    { startDate: startDateObj, endDate: endDateObj, key: "selection" },
-                ];
+                const rangeSelection = [{ startDate: startDateObj, endDate: endDateObj, key: "selection" }];
 
                 const setTripType = (type) => {
                     setFieldValue("tripType", type);
                     setOpenCalendar(false);
                     setOpenMultiCalIndex(null);
 
-                    if (type === "oneway") {
-                        setFieldValue("toDate", "");
-                    }
-
-                    //  UI phase: multicity me empty rows maintain (already in initialValues)
-                    // (No need to reset here unless you want)
+                    if (type === "oneway") setFieldValue("returnDate", "");
                 };
 
-                //  Multicity helpers
+                // multi helpers
                 const addSegment = () => {
                     if (values.segments.length >= 5) return;
-                    const newSeg = { from: "", to: "", date: "" };
-                    setFieldValue("segments", [...values.segments, newSeg]);
+                    setFieldValue("segments", [...values.segments, { from: "", to: "", date: "" }]);
                 };
 
                 const removeSegment = (index) => {
-                    const updated = values.segments.filter((_, i) => i !== index);
-                    setFieldValue("segments", updated);
+                    setFieldValue(
+                        "segments",
+                        values.segments.filter((_, i) => i !== index)
+                    );
                 };
 
                 const updateSegment = (index, field, value) => {
@@ -234,40 +251,44 @@ const FlightSearch = () => {
 
                 return (
                     <div className="w-full">
+                        {/* Error */}
+                        {error?.error && (
+                            <div className="mb-3 p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
+                                {error?.error} {error?.message ? `- ${error.message}` : ""}
+                            </div>
+                        )}
+
                         {/* Tabs */}
                         <div className="flex gap-6 mb-3 text-sm">
                             <span
-                                onClick={() => setTripType("roundtrip")}
-                                className={`cursor-pointer ${values.tripType === "roundtrip" ? "font-bold text-black" : "text-gray-500"
-                                    }`}
+                                onClick={() => setTripType("round")}
+                                className={`cursor-pointer ${values.tripType === "round" ? "font-bold text-black" : "text-gray-500"}`}
                             >
                                 ROUND TRIP
                             </span>
 
                             <span
                                 onClick={() => setTripType("oneway")}
-                                className={`cursor-pointer ${values.tripType === "oneway" ? "font-bold text-black" : "text-gray-500"
-                                    }`}
+                                className={`cursor-pointer ${values.tripType === "oneway" ? "font-bold text-black" : "text-gray-500"}`}
                             >
                                 ONE WAY
                             </span>
 
                             <span
-                                onClick={() => setTripType("multicity")}
-                                className={`cursor-pointer ${values.tripType === "multicity" ? "font-bold text-black" : "text-gray-500"
-                                    }`}
+                                onClick={() => setTripType("multi")}
+                                className={`cursor-pointer ${values.tripType === "multi" ? "font-bold text-black" : "text-gray-500"}`}
                             >
                                 MULTI CITY
                             </span>
                         </div>
 
                         <Form className="w-full">
-                            {/* ===================== SINGLE TRIP UI ===================== */}
+                            {/* SINGLE */}
                             {!isMulti && (
                                 <div className="flex w-full gap-3 items-stretch mb-2">
-                                    {/* FROM + TO GROUP */}
+                                    {/* FROM + TO */}
                                     <div className="relative z-[60] flex items-stretch w-[50%] gap-3 min-w-0">
-                                        {/* FROM BOX */}
+                                        {/* FROM */}
                                         <div className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`} ref={fromRef}>
                                             <div className="bg-blue-500 flex items-center justify-center w-12 shrink-0 rounded-l-lg">
                                                 <img src={pic} alt="Plane" className="w-6 h-6" />
@@ -322,12 +343,10 @@ const FlightSearch = () => {
                                             )}
                                         </div>
 
-                                        {/* SWAP BUTTON (Figma like) */}
+                                        {/* SWAP */}
                                         <div
                                             onClick={swapAirports}
-                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-             w-9 h-9 rounded-full bg-white border border-gray-200
-             shadow-sm z-[90] flex items-center justify-center cursor-pointer"
+                                            className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white border border-gray-200 shadow-sm z-[90] flex items-center justify-center cursor-pointer"
                                             title="Swap"
                                         >
                                             <div className="flex items-center gap-[2px] text-gray-400">
@@ -336,8 +355,7 @@ const FlightSearch = () => {
                                             </div>
                                         </div>
 
-
-                                        {/* TO BOX */}
+                                        {/* TO */}
                                         <div className={`${fieldShell} w-1/2 min-w-0 relative overflow-visible z-[70]`} ref={toRef}>
                                             <div className="flex-1 px-4 flex flex-col justify-center min-w-0">
                                                 <span className="font-bold text-lg leading-tight">{currentTo?.code || ""}</span>
@@ -393,7 +411,7 @@ const FlightSearch = () => {
                                         </div>
                                     </div>
 
-                                    {/* RIGHT SIDE */}
+                                    {/* RIGHT */}
                                     <div className="flex gap-3 w-[50%] min-w-0">
                                         {/* Date */}
                                         <div className="flex-1 relative min-w-0" ref={calendarRef}>
@@ -402,7 +420,6 @@ const FlightSearch = () => {
                                                 onClick={() => setOpenCalendar((p) => !p)}
                                             >
                                                 <span className="font-bold text-lg">{isRoundTrip ? "Date Range" : "Select Date"}</span>
-
                                                 <p className="text-gray-400 text-sm mt-1">
                                                     {isRoundTrip ? "Departure - Return Date" : "Departure Date"}
                                                 </p>
@@ -430,8 +447,8 @@ const FlightSearch = () => {
                                                             onChange={(item) => {
                                                                 const start = item.selection.startDate;
                                                                 const end = item.selection.endDate;
-                                                                setFieldValue("fromDate", format(start, "yyyy-MM-dd"));
-                                                                setFieldValue("toDate", format(end, "yyyy-MM-dd"));
+                                                                setFieldValue("date", format(start, "yyyy-MM-dd"));
+                                                                setFieldValue("returnDate", format(end, "yyyy-MM-dd"));
                                                             }}
                                                             months={2}
                                                             direction="horizontal"
@@ -443,8 +460,8 @@ const FlightSearch = () => {
 
                                                     {isOneWay && (
                                                         <Calendar
-                                                            date={values.fromDate ? new Date(values.fromDate) : new Date()}
-                                                            onChange={(date) => setFieldValue("fromDate", format(date, "yyyy-MM-dd"))}
+                                                            date={values.date ? new Date(values.date) : new Date()}
+                                                            onChange={(d) => setFieldValue("date", format(d, "yyyy-MM-dd"))}
                                                         />
                                                     )}
 
@@ -461,28 +478,28 @@ const FlightSearch = () => {
                                             )}
                                         </div>
 
-                                        {/* Traveler */}
+                                        {/* Adults + Class */}
                                         <div className="flex-1 relative min-w-0" ref={travelerRef}>
                                             <div
                                                 className={`${fieldShell} px-4 cursor-pointer flex flex-col justify-center`}
                                                 onClick={() => setShowTraveler((p) => !p)}
                                             >
-                                                <span className="font-bold text-lg">Traveler and class</span>
+                                                <span className="font-bold text-lg">Adults and class</span>
                                                 <p className="text-gray-500 text-sm mt-1 truncate">
-                                                    {values.traveler} Traveler - {values.travelClass}
+                                                    {values.adults} Adults - {values.travelClass}
                                                 </p>
                                             </div>
 
                                             {showTraveler && (
                                                 <div className="absolute top-[110px] left-0 w-full bg-white border border-gray-300 rounded-lg p-3 shadow-xl z-50">
-                                                    <p className="font-semibold mb-2">Travelers</p>
+                                                    <p className="font-semibold mb-2">Adults</p>
                                                     <div className="flex gap-2 mb-3 flex-wrap">
                                                         {[1, 2, 3, 4].map((num) => (
                                                             <button
                                                                 type="button"
                                                                 key={num}
-                                                                onClick={() => setFieldValue("traveler", num)}
-                                                                className={`px-3 py-1 border rounded ${values.traveler === num ? "bg-blue-500 text-white" : ""}`}
+                                                                onClick={() => setFieldValue("adults", num)}
+                                                                className={`px-3 py-1 border rounded ${values.adults === num ? "bg-blue-500 text-white" : ""}`}
                                                             >
                                                                 {num}
                                                             </button>
@@ -506,25 +523,27 @@ const FlightSearch = () => {
                                             )}
                                         </div>
 
-                                        {/* Search Button */}
+                                        {/* Search */}
                                         <div className="w-[100px] min-w-[100px]">
                                             <PrimaryBtn
                                                 type="submit"
-                                                className="w-full h-[100px] bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-3xl flex items-center justify-center"
+                                                disabled={loading}
+                                                className={`w-full h-[100px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
+                                                    }`}
                                             >
-                                                <CiSearch />
+                                                {loading ? "..." : <CiSearch />}
                                             </PrimaryBtn>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
-                            {/* ===================== MULTI CITY UI ===================== */}
+                            {/* MULTI */}
                             {isMulti && (
                                 <div className="flex flex-col gap-3">
                                     {values.segments.map((seg, index) => (
                                         <div key={suggestedKey(seg, index)} className="flex items-center gap-2 relative w-full">
-                                            {/* Left 70% */}
+                                            {/* Left */}
                                             <div className="flex flex-1 w-[70%] gap-2 min-w-0">
                                                 {/* From */}
                                                 <div className="flex border border-gray-300 rounded-lg flex-1 h-20 overflow-hidden min-w-0">
@@ -591,7 +610,7 @@ const FlightSearch = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Right 30%: Date + remove */}
+                                            {/* Right */}
                                             <div className="flex items-center gap-2 ml-4 w-[30%] justify-end">
                                                 <div className="flex-1 border border-gray-300 rounded-lg p-3 relative h-20 flex flex-col justify-center">
                                                     <span className="font-bold text-lg">Select Date</span>
@@ -610,9 +629,7 @@ const FlightSearch = () => {
                                                         >
                                                             <Calendar
                                                                 date={seg.date ? new Date(seg.date) : new Date()}
-                                                                onChange={(date) => {
-                                                                    updateSegment(index, "date", format(date, "yyyy-MM-dd"));
-                                                                }}
+                                                                onChange={(d) => updateSegment(index, "date", format(d, "yyyy-MM-dd"))}
                                                             />
                                                             <div className="flex justify-end mt-2">
                                                                 <button
@@ -627,7 +644,7 @@ const FlightSearch = () => {
                                                     )}
                                                 </div>
 
-                                                {/* Remove only for 3rd+ flights */}
+                                                {/* Remove 3rd+ */}
                                                 {index > 1 && (
                                                     <button
                                                         type="button"
@@ -657,28 +674,24 @@ const FlightSearch = () => {
                                             )}
                                         </div>
 
-                                        {/* Traveler & Search */}
+                                        {/* Adults & Search */}
                                         <div className="flex gap-3 items-center w-[40%] justify-end">
                                             <div className="border border-gray-300 rounded-lg p-3 relative flex-1" ref={travelerRef}>
-                                                <span className="font-bold text-lg">Traveler and class</span>
-                                                <p
-                                                    className="text-gray-500 text-sm mt-1 cursor-pointer"
-                                                    onClick={() => setShowTraveler((p) => !p)}
-                                                >
-                                                    {values.traveler} Traveler - {values.travelClass}
+                                                <span className="font-bold text-lg">Adults and class</span>
+                                                <p className="text-gray-500 text-sm mt-1 cursor-pointer" onClick={() => setShowTraveler((p) => !p)}>
+                                                    {values.adults} Adults - {values.travelClass}
                                                 </p>
 
                                                 {showTraveler && (
                                                     <div className="absolute top-full right-0 w-full bg-white border border-gray-300 rounded-lg mt-2 p-3 shadow-xl z-50">
-                                                        <p className="font-semibold mb-2">Travelers</p>
+                                                        <p className="font-semibold mb-2">Adults</p>
                                                         <div className="flex gap-2 mb-3 flex-wrap">
                                                             {[1, 2, 3, 4].map((num) => (
                                                                 <button
                                                                     type="button"
                                                                     key={num}
-                                                                    onClick={() => setFieldValue("traveler", num)}
-                                                                    className={`px-3 py-1 border rounded ${values.traveler === num ? "bg-blue-500 text-white" : ""
-                                                                        }`}
+                                                                    onClick={() => setFieldValue("adults", num)}
+                                                                    className={`px-3 py-1 border rounded ${values.adults === num ? "bg-blue-500 text-white" : ""}`}
                                                                 >
                                                                     {num}
                                                                 </button>
@@ -692,8 +705,7 @@ const FlightSearch = () => {
                                                                     type="button"
                                                                     key={cls}
                                                                     onClick={() => setFieldValue("travelClass", cls)}
-                                                                    className={`px-3 py-1 border rounded ${values.travelClass === cls ? "bg-blue-500 text-white" : ""
-                                                                        }`}
+                                                                    className={`px-3 py-1 border rounded ${values.travelClass === cls ? "bg-blue-500 text-white" : ""}`}
                                                                 >
                                                                     {cls}
                                                                 </button>
@@ -706,9 +718,11 @@ const FlightSearch = () => {
                                             <div className="w-[100px] min-w-[100px]">
                                                 <PrimaryBtn
                                                     type="submit"
-                                                    className="w-full h-[80px] bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-3xl flex items-center justify-center"
+                                                    disabled={loading}
+                                                    className={`w-full h-[80px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading ? "bg-blue-400" : "bg-blue-600 hover:bg-blue-700"
+                                                        }`}
                                                 >
-                                                    <CiSearch />
+                                                    {loading ? "..." : <CiSearch />}
                                                 </PrimaryBtn>
                                             </div>
                                         </div>
@@ -723,9 +737,7 @@ const FlightSearch = () => {
     );
 };
 
-//  stable key helper (optional)
 function suggestedKey(seg, index) {
-    // UI phase: simple stable key
     return `${index}-${seg.from}-${seg.to}-${seg.date}`;
 }
 
