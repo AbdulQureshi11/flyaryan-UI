@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+
+@font-face {
+  font-family: Teko-Regular;
+  src: url('./assets//fonts/Teko-Regular.ttf');
+}
+
+@theme {
+  --font-teko: Teko-Regular, "sans-serif";
+}
+
+@keyframes scroll {
+  0% {
+    transform: translateX(0%);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 20s linear infinite;
+}
+
+@keyframes updown {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+    /* move up 10px */
+  }
+}
+
+/* /* Up and down animation for image9 */
+@keyframes updown-1 {
+
+  0%,
+  100% {
+    transform: translateY(40px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+
+  /* moves up */
+}
+
+/* Up and down animation for image7 (opposite) */
+@keyframes updown-2 {
+
+  0%,
+  100% {
+    transform: translateY(-70px);
+  }
+
+  50% {
+    transform: translateY(20px);
+  }
+
+  /* moves down */
+}
+
+.animate-updown-1 {
+  animation: updown-1 10s ease-in-out infinite;
+}
+
+.animate-updown-2 {
+  animation: updown-2 10s ease-in-out infinite;
+}
+
+/* Left and right animation for clouds (image10) */
+@keyframes leftright {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(30px);
+    /* moves 20px to the right */
+  }
+}
+
+.animate-leftright {
+  animation: leftright 10s ease-in-out infinite;
+}
