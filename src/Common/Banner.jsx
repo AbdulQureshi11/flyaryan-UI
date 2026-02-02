@@ -6,7 +6,7 @@ const Banner = () => {
   const [current, setCurrent] = useState(0);
   const [slide, setSlide] = useState(true);
 
-  // Automatic slide change every 7 seconds
+  // Slide change after 4 seconds
   useEffect(() => {
     const timer = setInterval(() => {
       changeSlide((current + 1) % headinglist.length);

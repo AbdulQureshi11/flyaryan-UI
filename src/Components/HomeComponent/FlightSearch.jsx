@@ -79,7 +79,6 @@ const FlightSearch = () => {
         travelClass: "Economy",
         fromDate: "",
         toDate: "",
-
         //  MultiCity: start with 2 EMPTY rows (no preset date/from/to)
         segments: [
             { from: "", to: "", date: "" },
