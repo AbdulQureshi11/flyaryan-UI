@@ -51,22 +51,13 @@ const normalizeForBackend = (p) => {
     return payload;
 };
 
-// Flight Search API Call (NO extra mapping)
 export const asyncSearchFlights = createAsyncThunk(
     "flightSearch/search",
-    async (payloadFromUI, { rejectWithValue }) => {
+    async (payload, { rejectWithValue }) => {
         try {
-            const payload = normalizeForBackend(payloadFromUI);
-
-            // debug (optional)
-            console.log("FINAL PAYLOAD SENT =>", payload);
-
-            const url = joinUrl(baseURL, "/api/search");
-            const res = await axios.post(url, payload);
-            return res?.data;
+            const res = await axios.post(`${baseURL}/api/search`, payload);
+            return res.data;
         } catch (error) {
-            // show real error
-            console.log("API ERROR =>", error?.response?.data || error?.message);
             return rejectWithValue(
                 error?.response?.data || { error: "Flight search failed" }
             );

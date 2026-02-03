@@ -15,11 +15,11 @@ import { format } from "date-fns";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
 
-// ✅ Redux
+// Redux
 import { useDispatch, useSelector } from "react-redux";
 import { asyncSearchFlights } from "../../features/flightsearch/flightsearchSlice";
 
-// ✅ Router
+// Router
 import { useNavigate } from "react-router-dom";
 
 const API_BASE =
@@ -41,7 +41,7 @@ const FlightSearch = () => {
     const [openMultiCalIndex, setOpenMultiCalIndex] = useState(null);
     const multiCalendarRef = useRef(null);
 
-    // ✅ Suggestions dropdown state
+    // Suggestions dropdown state
     const [openSuggest, setOpenSuggest] = useState({
         field: null, // "from" | "to" | "mfrom" | "mto"
         index: null,
@@ -52,17 +52,17 @@ const FlightSearch = () => {
     const toRef = useRef(null);
     const travelerRef = useRef(null);
 
-    // ✅ Single input text (what user types / sees)
+    // Single input text (what user types / sees)
     const [fromText, setFromText] = useState("");
     const [toText, setToText] = useState("");
 
-    // ✅ Suggestions data
+    // Suggestions data
     const [fromSug, setFromSug] = useState([]);
     const [toSug, setToSug] = useState([]);
     const [multiSug, setMultiSug] = useState([]); // shared for active multi field
     const [sugLoading, setSugLoading] = useState(false);
 
-    // ✅ Multi input text per segment
+    // Multi input text per segment
     const [multiText, setMultiText] = useState([
         { fromText: "", toText: "" },
         { fromText: "", toText: "" },
@@ -96,7 +96,7 @@ const FlightSearch = () => {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // ✅ navigate after search success
+    // navigate after search success
     useEffect(() => {
         if (!loading && Array.isArray(flights) && flights.length > 0) {
             navigate("/flight-listing");
@@ -104,7 +104,7 @@ const FlightSearch = () => {
     }, [loading, flights, navigate]);
 
     /**
-     * ✅ Backend: GET /api/airports?q=isb&limit=10
+     * Backend: GET /api/airports?q=isb&limit=10
      */
     const fetchAirports = async (q, limit = 8) => {
         const url = `${API_BASE}/airports?q=${encodeURIComponent(q)}&limit=${limit}`;
@@ -114,7 +114,7 @@ const FlightSearch = () => {
     };
 
     /**
-     * ✅ Debounced search helper
+     * Debounced search helper
      */
     const useDebouncedAirportSearch = (query, onResult, enabled = true) => {
         useEffect(() => {
@@ -145,7 +145,7 @@ const FlightSearch = () => {
         }, [query, enabled]); // eslint-disable-line
     };
 
-    // ✅ single suggestions
+    // single suggestions
     useDebouncedAirportSearch(
         fromText,
         (list) => setFromSug(list),
@@ -157,7 +157,7 @@ const FlightSearch = () => {
         openSuggest.field === "to"
     );
 
-    // ✅ multi suggestions (active only)
+    // multi suggestions (active only)
     const activeMultiIndex = openSuggest.field === "mfrom" || openSuggest.field === "mto"
         ? openSuggest.index
         : null;
@@ -176,7 +176,7 @@ const FlightSearch = () => {
     );
 
     /**
-     * ✅ NOW FORM FIELDS SAME AS BACKEND
+     * NOW FORM FIELDS SAME AS BACKEND
      * tripType: oneway | round | multi
      * from/to/date/returnDate/adults/travelClass/segments
      */
@@ -194,7 +194,7 @@ const FlightSearch = () => {
         ],
     };
 
-    // ✅ Validation updated to backend names
+    // Validation updated to backend names
     const validationSchema = Yup.object().shape({
         tripType: Yup.string().oneOf(["round", "oneway", "multi"]).required(),
 
@@ -242,19 +242,21 @@ const FlightSearch = () => {
         }),
     });
 
-    // ✅ Submit: values already backend-ready
     const handleSubmit = async (values) => {
         const tripType =
-            values.tripType === "roundtrip"
-                ? "round"
-                : values.tripType === "multicity"
-                    ? "multi"
+            values.tripType === "roundtrip" ? "round"
+                : values.tripType === "multicity" ? "multi"
                     : values.tripType;
 
+        // ✅ EXACT backend payload (NO adults at top-level)
         let payload = {
             tripType,
-            adults: Number(values.adults ?? 1),
             travelClass: values.travelClass ?? "Economy",
+            travelers: {
+                adults: Number(values.adults ?? 1),
+                child: 0,
+                infant: 0,
+            },
         };
 
         if (tripType === "multi") {
@@ -273,7 +275,7 @@ const FlightSearch = () => {
             if (tripType === "round") payload.returnDate = values.returnDate;
         }
 
-        console.log("✅ PAYLOAD GOING =>", payload);
+        console.log("✅ FINAL PAYLOAD (ONLY ONE) =>", payload);
 
         const res = await dispatch(asyncSearchFlights(payload));
         if (res?.meta?.requestStatus === "rejected") {
@@ -281,10 +283,11 @@ const FlightSearch = () => {
         }
     };
 
+
     const fieldShell =
         "flex items-stretch border border-gray-300 rounded-lg bg-white h-[100px]";
 
-    // ✅ Suggest item renderer
+    // Suggest item renderer
     const SuggestItem = ({ item, onPick }) => {
         return (
             <div
@@ -459,8 +462,8 @@ const FlightSearch = () => {
                             <span
                                 onClick={() => setTripType("round")}
                                 className={`cursor-pointer ${values.tripType === "round"
-                                        ? "font-bold text-black"
-                                        : "text-gray-500"
+                                    ? "font-bold text-black"
+                                    : "text-gray-500"
                                     }`}
                             >
                                 ROUND TRIP
@@ -469,8 +472,8 @@ const FlightSearch = () => {
                             <span
                                 onClick={() => setTripType("oneway")}
                                 className={`cursor-pointer ${values.tripType === "oneway"
-                                        ? "font-bold text-black"
-                                        : "text-gray-500"
+                                    ? "font-bold text-black"
+                                    : "text-gray-500"
                                     }`}
                             >
                                 ONE WAY
@@ -479,8 +482,8 @@ const FlightSearch = () => {
                             <span
                                 onClick={() => setTripType("multi")}
                                 className={`cursor-pointer ${values.tripType === "multi"
-                                        ? "font-bold text-black"
-                                        : "text-gray-500"
+                                    ? "font-bold text-black"
+                                    : "text-gray-500"
                                     }`}
                             >
                                 MULTI CITY
@@ -507,7 +510,7 @@ const FlightSearch = () => {
                                                     {values.from || ""}
                                                 </span>
 
-                                                {/* ✅ INPUT */}
+                                                {/* INPUT */}
                                                 <input
                                                     value={fromText}
                                                     onChange={(e) => {
@@ -524,7 +527,7 @@ const FlightSearch = () => {
                                                 />
                                             </div>
 
-                                            {/* ✅ Suggestions */}
+                                            {/* Suggestions */}
                                             {openSuggest.field === "from" && (
                                                 <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[340px] overflow-y-auto">
                                                     {sugLoading && (
@@ -572,7 +575,7 @@ const FlightSearch = () => {
                                                     {values.to || ""}
                                                 </span>
 
-                                                {/* ✅ INPUT */}
+                                                {/* INPUT */}
                                                 <input
                                                     value={toText}
                                                     onChange={(e) => {
@@ -592,7 +595,7 @@ const FlightSearch = () => {
                                                 <img src={pic2} alt="Arrival" className="w-9 h-9" />
                                             </div>
 
-                                            {/* ✅ Suggestions */}
+                                            {/* Suggestions */}
                                             {openSuggest.field === "to" && (
                                                 <div className="absolute left-0 top-[105px] w-full bg-white rounded-xl shadow-2xl border border-gray-200 z-[9999] overflow-hidden max-h-[340px] overflow-y-auto">
                                                     {sugLoading && (
@@ -721,8 +724,8 @@ const FlightSearch = () => {
                                                                 key={num}
                                                                 onClick={() => setFieldValue("adults", num)}
                                                                 className={`px-3 py-1 border rounded ${values.adults === num
-                                                                        ? "bg-blue-500 text-white"
-                                                                        : ""
+                                                                    ? "bg-blue-500 text-white"
+                                                                    : ""
                                                                     }`}
                                                             >
                                                                 {num}
@@ -738,8 +741,8 @@ const FlightSearch = () => {
                                                                 key={cls}
                                                                 onClick={() => setFieldValue("travelClass", cls)}
                                                                 className={`px-3 py-1 border rounded ${values.travelClass === cls
-                                                                        ? "bg-blue-500 text-white"
-                                                                        : ""
+                                                                    ? "bg-blue-500 text-white"
+                                                                    : ""
                                                                     }`}
                                                             >
                                                                 {cls}
@@ -756,8 +759,8 @@ const FlightSearch = () => {
                                                 type="submit"
                                                 disabled={loading}
                                                 className={`w-full h-[100px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading
-                                                        ? "bg-blue-400"
-                                                        : "bg-blue-600 hover:bg-blue-700"
+                                                    ? "bg-blue-400"
+                                                    : "bg-blue-600 hover:bg-blue-700"
                                                     }`}
                                             >
                                                 {loading ? "..." : <CiSearch />}
@@ -989,8 +992,8 @@ const FlightSearch = () => {
                                                                     key={num}
                                                                     onClick={() => setFieldValue("adults", num)}
                                                                     className={`px-3 py-1 border rounded ${values.adults === num
-                                                                            ? "bg-blue-500 text-white"
-                                                                            : ""
+                                                                        ? "bg-blue-500 text-white"
+                                                                        : ""
                                                                         }`}
                                                                 >
                                                                     {num}
@@ -1006,8 +1009,8 @@ const FlightSearch = () => {
                                                                     key={cls}
                                                                     onClick={() => setFieldValue("travelClass", cls)}
                                                                     className={`px-3 py-1 border rounded ${values.travelClass === cls
-                                                                            ? "bg-blue-500 text-white"
-                                                                            : ""
+                                                                        ? "bg-blue-500 text-white"
+                                                                        : ""
                                                                         }`}
                                                                 >
                                                                     {cls}
@@ -1023,8 +1026,8 @@ const FlightSearch = () => {
                                                     type="submit"
                                                     disabled={loading}
                                                     className={`w-full h-[80px] text-white font-bold rounded-lg text-3xl flex items-center justify-center ${loading
-                                                            ? "bg-blue-400"
-                                                            : "bg-blue-600 hover:bg-blue-700"
+                                                        ? "bg-blue-400"
+                                                        : "bg-blue-600 hover:bg-blue-700"
                                                         }`}
                                                 >
                                                     {loading ? "..." : <CiSearch />}

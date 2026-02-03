@@ -8,6 +8,7 @@ import { RoundTicket } from "../../Common/TicketRound";
 import pic3 from "../../pictures/linessss.png";
 import { Link } from "react-router-dom";
 import Flightlisting from "../../Pages/Flightlisting";
+import FlightSearch from "../HomeComponent/FlightSearch";
 
 const FlightListingComp = () => {
     const [selected, setSelected] = useState("ISB");
@@ -40,193 +41,13 @@ const FlightListingComp = () => {
         AIRLINE: ["Emirates", "Qatar Airways", "Etihad"],
     };
 
-    const optionsFrom = [
-        { code: "ISB", name: "Islamabad International Airport" },
-        { code: "KHI", name: "Karachi International Airport" },
-        { code: "PEW", name: "Peshawar International Airport" },
-        { code: "LHE", name: "Lahore International Airport" },
-    ];
-
-    const optionsTo = [
-        { code: "DXB", name: "Dubai International Airport" },
-        { code: "DOH", name: "Hamad International Airport, Qatar" },
-        { code: "RUH", name: "King Khalid International Airport, Saudi" },
-    ];
-
-    const current = optionsFrom.find((opt) => opt.code === selected);
-    const currentTo = optionsTo.find((opt) => opt.code === selectedTo);
-
     return (
         <>
             <div className="flex flex-col items-center mt-10 w-full gap-6">
                 {/* ========================= */}
                 {/* Main Form */}
                 <div className="w-[87%] border border-gray-300 rounded-xl p-4 flex flex-col gap-4 bg-white shadow-lg">
-                    {/* Tabs */}
-                    <div className="flex border-b border-gray-300 pb-2 gap-2 items-center justify-center">
-
-                        <button className="flex gap-6 font-bold text-gray-600 h">
-                            <h1 className="hover:text-black">Round trip </h1>
-                            <h1 className="hover:text-black">One way</h1>
-                            <h1 className="hover:text-black">multi city </h1>
-                        </button>
-
-                    </div>
-
-                    {/* Form Fields */}
-                    <div className="flex gap-1 w-full">
-                        {/* From */}
-                        <div className="flex border border-gray-300 rounded-lg w-[25%] h-20 overflow-hidden">
-                            <div className="bg-blue-500 flex items-center justify-center h-full w-12">
-                                <img src={pic} alt="Plane" className="w-6 h-6" />
-                            </div>
-                            <div className="flex-1 p-3 flex flex-col justify-center">
-                                <span className="font-bold text-lg">{current.code}</span>
-                                <select
-                                    className="mt-1 border-none outline-none w-full text-gray-600 cursor-pointer"
-                                    value={selected}
-                                    onChange={(e) => setSelected(e.target.value)}
-                                >
-                                    {optionsFrom.map((opt) => (
-                                        <option key={opt.code} value={opt.code}>
-                                            {opt.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        {/* Swap */}
-                        <div className="flex flex-col items-center ml-[-11px] justify-center w-7 h-7 mt-7 rounded-full border border-gray-300 text-gray-500 cursor-pointer bg-white shadow-lg z-10">
-                            <FiArrowLeft className="text-xl" />
-                            <FiArrowRight className="text-xl" />
-                        </div>
-
-                        {/* To */}
-                        <div className="flex items-center border border-gray-300 rounded-lg w-[250px] h-20 ml-[-11px] overflow-hidden">
-                            <div className="flex-1 p-3 flex flex-col justify-center">
-                                <span className="font-bold text-lg">{currentTo.code}</span>
-                                <select
-                                    className="mt-1 border-none outline-none w-full text-gray-600 cursor-pointer"
-                                    value={selectedTo}
-                                    onChange={(e) => setSelectedTo(e.target.value)}
-                                >
-                                    {optionsTo.map((opt) => (
-                                        <option key={opt.code} value={opt.code}>
-                                            {opt.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="bg-blue-500 flex items-center justify-center h-full w-12">
-                                <img src={pic2} alt="Arrival" className="w-9 h-9" />
-                            </div>
-                        </div>
-
-                        {/* Date + Traveler + Search */}
-                        <div className="flex gap-4 w-[50%] pl-4">
-                            {/* Date */}
-                            <div className="flex-1 border border-gray-300 rounded-lg p-3 relative">
-                                <span className="font-bold text-lg">Return Ticket</span>
-                                <p
-                                    className="text-gray-500 text-sm cursor-pointer mt-1"
-                                    onClick={() => {
-                                        if (activeDate === "from") {
-                                            document.getElementById("fromDate").showPicker();
-                                        } else {
-                                            document.getElementById("toDate").showPicker();
-                                        }
-                                    }}
-                                >
-                                    {new Date(fromDate).toLocaleDateString("en-GB", {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                    })}{" "}
-                                    →{" "}
-                                    {new Date(toDate).toLocaleDateString("en-GB", {
-                                        day: "2-digit",
-                                        month: "short",
-                                        year: "numeric",
-                                    })}
-                                </p>
-
-                                <input
-                                    type="date"
-                                    id="fromDate"
-                                    value={fromDate}
-                                    onChange={(e) => {
-                                        setFromDate(e.target.value);
-                                        setActiveDate("to");
-                                    }}
-                                    className="absolute opacity-0 pointer-events-none"
-                                />
-                                <input
-                                    type="date"
-                                    id="toDate"
-                                    value={toDate}
-                                    min={fromDate}
-                                    onChange={(e) => {
-                                        setToDate(e.target.value);
-                                        setActiveDate("from");
-                                    }}
-                                    className="absolute opacity-0 pointer-events-none"
-                                />
-                            </div>
-
-                            {/* Traveler */}
-                            <div className="flex-1 border border-gray-300 rounded-lg p-3 relative">
-                                <span className="font-bold text-lg">Traveler - Economy</span>
-                                <p
-                                    className="text-gray-500 text-sm mt-1 cursor-pointer"
-                                    onClick={() => setShowTraveler(!showTraveler)}
-                                >
-                                    {traveler} Traveler - {travelClass}
-                                </p>
-
-                                {showTraveler && (
-                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-300 rounded-lg mt-2 p-3 shadow-xl z-20">
-                                        <p className="font-semibold mb-2">Travelers</p>
-                                        <div className="flex gap-2 mb-3">
-                                            {[1, 2, 3, 4].map((num) => (
-                                                <button
-                                                    key={num}
-                                                    onClick={() => setTraveler(num)}
-                                                    className={`px-3 py-1 border rounded ${traveler === num ? "bg-blue-500 text-white" : ""
-                                                        }`}
-                                                >
-                                                    {num}
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        <p className="font-semibold mb-2">Class</p>
-                                        <div className="flex gap-1">
-                                            {["Economy", "Business", "First"].map((cls) => (
-                                                <button
-                                                    key={cls}
-                                                    onClick={() => setTravelClass(cls)}
-                                                    className={`px-1 py-1 border rounded ${travelClass === cls
-                                                        ? "bg-blue-500 text-white"
-                                                        : ""
-                                                        }`}
-                                                >
-                                                    {cls}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Search */}
-                            <div className="w-20 h-[80px]">
-                                <button className="w-full h-full bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-3xl flex items-center justify-center">
-                                    <CiSearch />
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <FlightSearch />
                 </div>
                 {/* Form border ends */}
 
