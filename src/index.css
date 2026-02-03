@@ -92,3 +92,14 @@
 .animate-leftright {
   animation: leftright 10s ease-in-out infinite;
 }
+
+
+/* hide scrollbar but keep scrolling */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

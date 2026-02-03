@@ -17,8 +17,9 @@ import { useDispatch, useSelector } from "react-redux";
 import { setSelectedFlight } from "../../features/flightsearch/flightsearchSlice";
 
 // Dummy blocks (top summary)
-import { Showingdata } from "../../Common/Showing";
+
 import Filter from "./Filter";
+import MultiDate from "./MultiDate";
 
 // ---------- helpers ----------
 
@@ -363,26 +364,7 @@ const FlightListingComp = () => {
 
             {/* Top summary row */}
             <div>
-                <div className="flex gap-6 py-4 text-xs justify-center border border-blue-600 mt-10 mb-10">
-                    {Showingdata.map((items, index) => (
-                        <div key={index}>
-                            <div
-                                className={`pl-8 pr-8 pt-4 pb-4 -mt-4 -mb-6 ${index === 0 ? "bg-blue-600 text-white" : ""
-                                    }`}
-                            >
-                                <h1>{items.heading}</h1>
-                                <h1 className="mt-1 font-bold">
-                                    {index === 0
-                                        ? `Showing ${totalResults || filteredFlights.length} results`
-                                        : items.heading2}
-                                </h1>
-                            </div>
-
-                            <h1>{items.title}</h1>
-                            <h1 className="font-bold pt-2">{items.title2}</h1>
-                        </div>
-                    ))}
-                </div>
+                <MultiDate resultsCount={filteredFlights.length} nextDatesCount={6} />
             </div>
 
             {/* Loading / Error / Empty */}
