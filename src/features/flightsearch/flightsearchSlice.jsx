@@ -2,18 +2,11 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 import { baseURL } from "../../utlis/baseUrl";
 
-// helper: avoid // in URL
-const joinUrl = (base, path) => {
-    const b = String(base || "").replace(/\/+$/, "");
-    const p = String(path || "").replace(/^\/+/, "");
-    return `${b}/${p}`;
-};
-
 // normalize payload for backend
 const normalizeForBackend = (p) => {
     const payload = { ...(p || {}) };
 
-    // if frontend sends adults, but backend expects travelers object
+    // backend expects travelers object
     if (!payload.travelers) {
         const adults = Number(payload.adults ?? payload?.travelers?.adults ?? 1);
         payload.travelers = {
@@ -23,14 +16,13 @@ const normalizeForBackend = (p) => {
         };
     }
 
-    // keep travelClass default
     if (!payload.travelClass) payload.travelClass = "Economy";
 
-    // normalize tripType values (just in case)
+    // normalize tripType
     if (payload.tripType === "roundtrip") payload.tripType = "round";
     if (payload.tripType === "multicity") payload.tripType = "multi";
 
-    // uppercase airport codes
+    // uppercase
     if (payload.from) payload.from = String(payload.from).toUpperCase();
     if (payload.to) payload.to = String(payload.to).toUpperCase();
 
@@ -42,8 +34,7 @@ const normalizeForBackend = (p) => {
         }));
     }
 
-    // IMPORTANT: backend may not expect top-level adults, child, infant
-    // (it destructures travelers). So remove them to avoid confusion.
+    // remove top-level pax fields
     delete payload.adults;
     delete payload.child;
     delete payload.infant;
@@ -55,7 +46,8 @@ export const asyncSearchFlights = createAsyncThunk(
     "flightSearch/search",
     async (payload, { rejectWithValue }) => {
         try {
-            const res = await axios.post(`${baseURL}/api/search`, payload);
+            const body = normalizeForBackend(payload);
+            const res = await axios.post(`${baseURL}/api/search`, body);
             return res.data;
         } catch (error) {
             return rejectWithValue(
@@ -80,6 +72,9 @@ const initialState = {
     flights: [],
     totalResults: 0,
 
+    // ✅ new: for details page
+    selectedFlight: null,
+
     loading: false,
     error: null,
 };
@@ -97,6 +92,14 @@ export const flightSearchSlice = createSlice({
             state.error = null;
             state.loading = false;
         },
+
+        // ✅ new
+        setSelectedFlight: (state, action) => {
+            state.selectedFlight = action.payload || null;
+        },
+        clearSelectedFlight: (state) => {
+            state.selectedFlight = null;
+        },
     },
     extraReducers: (builder) => {
         builder.addCase(asyncSearchFlights.pending, (state) => {
@@ -111,7 +114,7 @@ export const flightSearchSlice = createSlice({
             state.flights = data?.flights || [];
             state.totalResults = data?.totalResults || 0;
 
-            // store backend-confirmed criteria if provided
+            // criteria store
             state.criteria.tripType = data?.tripType || state.criteria.tripType;
             state.criteria.travelers = data?.travelers || state.criteria.travelers;
             state.criteria.travelClass = data?.travelClass || state.criteria.travelClass;
@@ -130,5 +133,11 @@ export const flightSearchSlice = createSlice({
     },
 });
 
-export const { setSearchCriteria, clearSearchResults } = flightSearchSlice.actions;
+export const {
+    setSearchCriteria,
+    clearSearchResults,
+    setSelectedFlight,
+    clearSelectedFlight,
+} = flightSearchSlice.actions;
+
 export default flightSearchSlice.reducer;
