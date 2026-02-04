@@ -1044,7 +1044,6 @@ const FlightSearch = () => {
         </Formik>
     );
 };
-
 function suggestedKey(seg, index) {
     return `${index}-${seg.from}-${seg.to}-${seg.date}`;
 }

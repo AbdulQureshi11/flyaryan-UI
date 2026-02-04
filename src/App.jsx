@@ -12,9 +12,9 @@ import Grouptickets from './Pages/Grouptickets';
 import Cheapflights from './Pages/Cheapflights';
 import About from './Pages/About';
 import Contactus from './Pages/Contactus';
-import OnewayDetails from './Pages/OnewayDetails';
 import Flightdetailpage from './Pages/Flightdetailpage';
 import Flightlisting from './Pages/Flightlisting';
+import BookNow from "./Pages/BookNow";
 const App = () => {
   const router = createBrowserRouter(
     createRoutesFromElements(
@@ -27,8 +27,8 @@ const App = () => {
         <Route path="contact-us" element={<Contactus />} />
         <Route path="flight-detail" element={<Flightdetailpage />} />
         <Route path="flight-listing" element={<Flightlisting />} />
+        <Route path='/booking' element={<BookNow />} />
 
-        <Route path="oneway-details" element={<OnewayDetails />} />
 
 
       </Route>

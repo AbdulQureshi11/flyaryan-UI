@@ -46,7 +46,7 @@ const safe = (v, fallback = "") =>
     v === undefined || v === null || v === "" ? fallback : v;
 
 // baggage max weight only
-const baggageMaxOnly = (b, fallback = "30") => {
+const baggageMaxOnly = (b, fallback = "") => {
     if (!b) return fallback;
 
     if (typeof b === "object") {
